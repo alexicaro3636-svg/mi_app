@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
-import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_bluetooth_serial_plus/flutter_bluetooth_serial_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'services/reporte_service.dart';
+import 'models/registro_operacion.dart';
 
 void main() {
   runApp(const TelemetriaApp());
@@ -23,105 +24,7 @@ class Usuario {
   });
 }
 
-class RegistroOperacion {
-  final String operationKey;
-  final String usuario;
-  final String rol;
-  final String lugar;
-  final String idTrabajo;
-  final String grupoHistorial;
-  final DateTime fechaInicio;
-  final DateTime fechaFin;
-  final String tiempoOperacion;
-  final double rpmPromedio;
-  final double totalBombeado;
-  final String resumenTexto;
-  final bool pendienteEnvio;
-
-  RegistroOperacion({
-    required this.operationKey,
-    required this.usuario,
-    required this.rol,
-    required this.lugar,
-    required this.idTrabajo,
-    required this.grupoHistorial,
-    required this.fechaInicio,
-    required this.fechaFin,
-    required this.tiempoOperacion,
-    required this.rpmPromedio,
-    required this.totalBombeado,
-    required this.resumenTexto,
-    required this.pendienteEnvio,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'operationKey': operationKey,
-      'usuario': usuario,
-      'rol': rol,
-      'lugar': lugar,
-      'idTrabajo': idTrabajo,
-      'grupoHistorial': grupoHistorial,
-      'fechaInicio': fechaInicio.toIso8601String(),
-      'fechaFin': fechaFin.toIso8601String(),
-      'tiempoOperacion': tiempoOperacion,
-      'rpmPromedio': rpmPromedio,
-      'totalBombeado': totalBombeado,
-      'resumenTexto': resumenTexto,
-      'pendienteEnvio': pendienteEnvio,
-    };
-  }
-
-  factory RegistroOperacion.fromMap(Map<String, dynamic> map) {
-    return RegistroOperacion(
-      operationKey: map['operationKey'] ?? '',
-      usuario: map['usuario'] ?? '',
-      rol: map['rol'] ?? '',
-      lugar: map['lugar'] ?? '',
-      idTrabajo: map['idTrabajo'] ?? '',
-      grupoHistorial: map['grupoHistorial'] ?? '',
-      fechaInicio: DateTime.parse(map['fechaInicio']),
-      fechaFin: DateTime.parse(map['fechaFin']),
-      tiempoOperacion: map['tiempoOperacion'] ?? '',
-      rpmPromedio: (map['rpmPromedio'] ?? 0).toDouble(),
-      totalBombeado: (map['totalBombeado'] ?? 0).toDouble(),
-      resumenTexto: map['resumenTexto'] ?? '',
-      pendienteEnvio: map['pendienteEnvio'] ?? false,
-    );
-  }
-
-  RegistroOperacion copyWith({
-    String? operationKey,
-    String? usuario,
-    String? rol,
-    String? lugar,
-    String? idTrabajo,
-    String? grupoHistorial,
-    DateTime? fechaInicio,
-    DateTime? fechaFin,
-    String? tiempoOperacion,
-    double? rpmPromedio,
-    double? totalBombeado,
-    String? resumenTexto,
-    bool? pendienteEnvio,
-  }) {
-    return RegistroOperacion(
-      operationKey: operationKey ?? this.operationKey,
-      usuario: usuario ?? this.usuario,
-      rol: rol ?? this.rol,
-      lugar: lugar ?? this.lugar,
-      idTrabajo: idTrabajo ?? this.idTrabajo,
-      grupoHistorial: grupoHistorial ?? this.grupoHistorial,
-      fechaInicio: fechaInicio ?? this.fechaInicio,
-      fechaFin: fechaFin ?? this.fechaFin,
-      tiempoOperacion: tiempoOperacion ?? this.tiempoOperacion,
-      rpmPromedio: rpmPromedio ?? this.rpmPromedio,
-      totalBombeado: totalBombeado ?? this.totalBombeado,
-      resumenTexto: resumenTexto ?? this.resumenTexto,
-      pendienteEnvio: pendienteEnvio ?? this.pendienteEnvio,
-    );
-  }
-}
+  
 
 final List<Usuario> usuarios = [
   Usuario(nombre: 'admin', pin: '1234', rol: 'admin'),
@@ -140,154 +43,7 @@ class AppConfig {
   static const String sendPath = '/send';
 }
 
-class ReporteService {
-  static Future<List<RegistroOperacion>> cargarHistorial() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getStringList('historial_operaciones') ?? [];
-    return raw
-        .map((e) => RegistroOperacion.fromMap(jsonDecode(e)))
-        .toList();
-  }
 
-  static Future<void> guardarHistorial(List<RegistroOperacion> lista) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(
-      'historial_operaciones',
-      lista.map((e) => jsonEncode(e.toMap())).toList(),
-    );
-  }
-
-  static Future<List<RegistroOperacion>> cargarPendientes() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getStringList('reportes_pendientes') ?? [];
-    return raw
-        .map((e) => RegistroOperacion.fromMap(jsonDecode(e)))
-        .toList();
-  }
-
-  static Future<void> guardarPendientes(List<RegistroOperacion> lista) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setStringList(
-      'reportes_pendientes',
-      lista.map((e) => jsonEncode(e.toMap())).toList(),
-    );
-  }
-
-  static Future<void> guardarRegistroComoPendiente(
-    RegistroOperacion registro,
-  ) async {
-    final historial = await cargarHistorial();
-    final pendientes = await cargarPendientes();
-
-    historial.add(registro);
-    pendientes.add(registro);
-
-    await guardarHistorial(historial);
-    await guardarPendientes(pendientes);
-  }
-
-  static Future<void> marcarComoEnviado(String operationKey) async {
-    final historial = await cargarHistorial();
-    final pendientes = await cargarPendientes();
-
-    final historialActualizado = historial
-        .map(
-          (r) => r.operationKey == operationKey
-              ? r.copyWith(pendienteEnvio: false)
-              : r,
-        )
-        .toList();
-
-    final pendientesActualizados =
-        pendientes.where((r) => r.operationKey != operationKey).toList();
-
-    await guardarHistorial(historialActualizado);
-    await guardarPendientes(pendientesActualizados);
-  }
-
-  static Future<bool> enviarResumenAlVps(String resumenTexto) async {
-    HttpClient? client;
-    try {
-      final query = {
-        'key': AppConfig.apiKey,
-        'dev': AppConfig.device,
-        'texto': resumenTexto,
-      };
-
-      final uri = Uri.http(
-        '${AppConfig.host}:${AppConfig.port}',
-        AppConfig.sendPath,
-        query,
-      );
-
-      client = HttpClient();
-      client.connectionTimeout = const Duration(seconds: 15);
-
-      final request = await client.getUrl(uri);
-      request.headers.set(HttpHeaders.connectionHeader, 'close');
-      request.headers.set(
-        HttpHeaders.acceptHeader,
-        'application/json,text/plain,*/*',
-      );
-
-      final response = await request.close();
-      final body = await utf8.decoder.bind(response).join();
-      final bodyLower = body.toLowerCase();
-
-      debugPrint('========== ENVIO VPS ==========');
-      debugPrint('URL: $uri');
-      debugPrint('STATUS: ${response.statusCode}');
-      debugPrint('BODY: $body');
-      debugPrint('================================');
-
-      if (response.statusCode != 200) {
-        return false;
-      }
-
-      if (bodyLower.contains('"ok":true') ||
-          bodyLower.contains('"success":true') ||
-          bodyLower.contains('"enviado":true') ||
-          bodyLower.contains('mensaje enviado') ||
-          bodyLower.contains('telegram enviado') ||
-          bodyLower.contains('enviado') ||
-          bodyLower.trim() == 'ok' ||
-          bodyLower.contains('ok')) {
-        return true;
-      }
-
-      return false;
-    } catch (e) {
-      debugPrint('ERROR enviando al VPS: $e');
-      return false;
-    } finally {
-      client?.close(force: true);
-    }
-  }
-
-  static Future<bool> intentarEnviarRegistro(RegistroOperacion registro) async {
-    final ok = await enviarResumenAlVps(registro.resumenTexto);
-    if (ok) {
-      await marcarComoEnviado(registro.operationKey);
-      return true;
-    }
-    return false;
-  }
-
-  static Future<int> reenviarPendientes() async {
-    final pendientes = await cargarPendientes();
-    int enviados = 0;
-
-    for (final registro in pendientes) {
-      final ok = await enviarResumenAlVps(registro.resumenTexto);
-      if (ok) {
-        enviados++;
-        await marcarComoEnviado(registro.operationKey);
-      }
-    }
-
-    return enviados;
-  }
-}
 
 class TelemetriaApp extends StatelessWidget {
   const TelemetriaApp({super.key});
@@ -1331,8 +1087,7 @@ class _PantallaMonitoreoState extends State<PantallaMonitoreo> {
       pendienteEnvio: true,
     );
 
-    await ReporteService.guardarRegistroComoPendiente(registro);
-    final enviado = await ReporteService.intentarEnviarRegistro(registro);
+    await ReporteService.guardarOperacionConSync(registro);
 
     if (!mounted) return;
 
@@ -1349,7 +1104,7 @@ class _PantallaMonitoreoState extends State<PantallaMonitoreo> {
           totalBombeado: totalFinal,
           tiempoOperacion: tiempoOperacion,
           resumenTexto: resumen,
-          pendienteEnvio: !enviado,
+          pendienteEnvio: true,
         ),
       ),
     );
