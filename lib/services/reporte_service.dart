@@ -32,7 +32,7 @@ class ReporteService {
         historial.add(op.copyWith(pendienteEnvio: false));
         await guardarHistorial(historial);
       } else {
-        throw Exception("Error servidor");
+        throw Exception('Error servidor');
       }
     } catch (e) {
       final historial = await cargarHistorial();
@@ -129,6 +129,73 @@ class ReporteService {
 
     final despues = await cargarPendientes();
     return cantidadAntes - despues.length;
+  }
+
+  static Future<List<RegistroOperacion>> cargarHistorialDesdeVps() async {
+    final url = Uri.parse(
+      'http://${AppConfig.host}:${AppConfig.port}/?key=${AppConfig.apiKey}&listar=1',
+    );
+
+    final response = await http.get(url);
+
+    if (response.statusCode != 200) {
+      throw Exception('Error al cargar historial desde VPS');
+    }
+
+    final decoded = jsonDecode(response.body);
+
+    if (decoded is! Map<String, dynamic>) {
+      throw Exception('Respuesta inválida del VPS');
+    }
+
+    if (decoded['ok'] != true) {
+      throw Exception('El VPS respondió con error');
+    }
+
+    final data = decoded['data'];
+
+    if (data is! List) {
+      throw Exception('La lista de historial no viene en data');
+    }
+
+    return data.map<RegistroOperacion>((item) {
+      final fechaInicio =
+          DateTime.tryParse(item['fecha_inicio']?.toString() ?? '') ??
+          DateTime.now();
+
+      final fechaFin =
+          DateTime.tryParse(item['fecha_fin']?.toString() ?? '') ?? fechaInicio;
+
+      final duracionSegundos =
+          int.tryParse(item['duracion_segundos']?.toString() ?? '0') ?? 0;
+
+      final horas = (duracionSegundos ~/ 3600).toString().padLeft(2, '0');
+      final minutos =
+          ((duracionSegundos % 3600) ~/ 60).toString().padLeft(2, '0');
+      final segundos = (duracionSegundos % 60).toString().padLeft(2, '0');
+
+      final lugar = item['lugar']?.toString() ?? '';
+      final grupo =
+          '$lugar - ${fechaFin.day.toString().padLeft(2, '0')}/${fechaFin.month.toString().padLeft(2, '0')}/${fechaFin.year}';
+
+      return RegistroOperacion(
+        operationKey: item['operation_key']?.toString() ?? '',
+        usuario: item['usuario']?.toString() ?? '',
+        rol: item['rol']?.toString() ?? '',
+        lugar: lugar,
+        idTrabajo: item['id_trabajo']?.toString() ?? '',
+        grupoHistorial: grupo,
+        fechaInicio: fechaInicio,
+        fechaFin: fechaFin,
+        tiempoOperacion: '$horas:$minutos:$segundos',
+        rpmPromedio:
+            double.tryParse(item['rpm_promedio']?.toString() ?? '0') ?? 0,
+        totalBombeado:
+            double.tryParse(item['volumen_total']?.toString() ?? '0') ?? 0,
+        resumenTexto: item['resumen_texto']?.toString() ?? '',
+        pendienteEnvio: false,
+      );
+    }).toList();
   }
 
   static int _parseDuracionASegundos(String tiempo) {

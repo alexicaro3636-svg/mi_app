@@ -24,8 +24,6 @@ class Usuario {
   });
 }
 
-  
-
 final List<Usuario> usuarios = [
   Usuario(nombre: 'admin', pin: '1234', rol: 'admin'),
   Usuario(nombre: 'operador', pin: '0000', rol: 'general'),
@@ -42,8 +40,6 @@ class AppConfig {
   static const int port = 3000;
   static const String sendPath = '/send';
 }
-
-
 
 class TelemetriaApp extends StatelessWidget {
   const TelemetriaApp({super.key});
@@ -198,6 +194,7 @@ class _PantallaLoginState extends State<PantallaLogin> {
     );
   }
 }
+
 class PantallaInicio extends StatefulWidget {
   final Usuario usuario;
 
@@ -793,99 +790,99 @@ class _PantallaMonitoreoState extends State<PantallaMonitoreo> {
   }
 
   Future<void> iniciarBt() async {
-  if (conectandoBt) return;
+    if (conectandoBt) return;
 
-  setState(() {
-    conectandoBt = true;
-    conectado = false;
-    contextoEnviado = false;
-    estado = 'BUSCANDO BT';
-  });
+    setState(() {
+      conectandoBt = true;
+      conectado = false;
+      contextoEnviado = false;
+      estado = 'BUSCANDO BT';
+    });
 
-  try {
-    debugPrint('========== BT DEBUG ==========');
-    debugPrint('Entrando a iniciarBt()');
+    try {
+      debugPrint('========== BT DEBUG ==========');
+      debugPrint('Entrando a iniciarBt()');
 
-    final dispositivos =
-        await FlutterBluetoothSerial.instance.getBondedDevices();
+      final dispositivos =
+          await FlutterBluetoothSerial.instance.getBondedDevices();
 
-    debugPrint('Dispositivos vinculados encontrados: ${dispositivos.length}');
+      debugPrint('Dispositivos vinculados encontrados: ${dispositivos.length}');
 
-    for (final d in dispositivos) {
-      debugPrint('BT Vinculado -> Nombre: ${d.name} | MAC: ${d.address}');
-    }
-
-    BluetoothDevice? objetivo;
-
-    for (final d in dispositivos) {
-      final nombre = (d.name ?? '').trim();
-      if (nombre == BtConfig.deviceName) {
-        objetivo = d;
-        break;
+      for (final d in dispositivos) {
+        debugPrint('BT Vinculado -> Nombre: ${d.name} | MAC: ${d.address}');
       }
-    }
 
-    if (objetivo == null) {
-      debugPrint('No se encontró el dispositivo: ${BtConfig.deviceName}');
+      BluetoothDevice? objetivo;
+
+      for (final d in dispositivos) {
+        final nombre = (d.name ?? '').trim();
+        if (nombre == BtConfig.deviceName) {
+          objetivo = d;
+          break;
+        }
+      }
+
+      if (objetivo == null) {
+        debugPrint('No se encontró el dispositivo: ${BtConfig.deviceName}');
+        if (!mounted) return;
+        setState(() {
+          conectandoBt = false;
+          conectado = false;
+          estado = 'ESP32 NO EMPAREJADO';
+        });
+        return;
+      }
+
+      debugPrint('Dispositivo objetivo encontrado');
+      debugPrint('Nombre objetivo: ${objetivo.name}');
+      debugPrint('MAC objetivo: ${objetivo.address}');
+
+      setState(() {
+        estado = 'CONECTANDO BT';
+      });
+
+      debugPrint('Intentando BluetoothConnection.toAddress(...)');
+
+      conexionBT = await BluetoothConnection.toAddress(objetivo.address);
+
+      debugPrint('Conexión BT abierta correctamente');
+
+      await btSubscription?.cancel();
+      btSubscription = conexionBT!.input!.listen((data) {
+        final recibido = utf8.decode(data, allowMalformed: true);
+        debugPrint('RAW BT: $recibido');
+        buffer += recibido;
+        procesarBuffer();
+      });
+
+      debugPrint('Listener BT iniciado');
+
+      if (!mounted) return;
+      setState(() {
+        conectandoBt = false;
+        conectado = true;
+        estado = 'CONECTADO';
+      });
+
+      debugPrint('Enviando PING...');
+      await enviarContextoABt();
+
+      debugPrint('Enviando START...');
+      await enviarComandoInicio();
+
+      debugPrint('========== BT OK ==========');
+    } catch (e) {
+      debugPrint('ERROR BT: $e');
+      debugPrint('========== BT FAIL ==========');
+
       if (!mounted) return;
       setState(() {
         conectandoBt = false;
         conectado = false;
-        estado = 'ESP32 NO EMPAREJADO';
+        estado = 'ERROR BT';
       });
-      return;
     }
-
-    debugPrint('Dispositivo objetivo encontrado');
-    debugPrint('Nombre objetivo: ${objetivo.name}');
-    debugPrint('MAC objetivo: ${objetivo.address}');
-
-    setState(() {
-      estado = 'CONECTANDO BT';
-    });
-
-    debugPrint('Intentando BluetoothConnection.toAddress(...)');
-
-    conexionBT = await BluetoothConnection.toAddress(objetivo.address);
-
-    debugPrint('Conexión BT abierta correctamente');
-
-    await btSubscription?.cancel();
-    btSubscription = conexionBT!.input!.listen((data) {
-      final recibido = utf8.decode(data, allowMalformed: true);
-      debugPrint('RAW BT: $recibido');
-      buffer += recibido;
-      procesarBuffer();
-    });
-
-    debugPrint('Listener BT iniciado');
-
-    if (!mounted) return;
-    setState(() {
-      conectandoBt = false;
-      conectado = true;
-      estado = 'CONECTADO';
-    });
-
-    debugPrint('Enviando PING...');
-    await enviarContextoABt();
-
-    debugPrint('Enviando START...');
-    await enviarComandoInicio();
-
-    debugPrint('========== BT OK ==========');
-  } catch (e) {
-    debugPrint('ERROR BT: $e');
-    debugPrint('========== BT FAIL ==========');
-
-    if (!mounted) return;
-    setState(() {
-      conectandoBt = false;
-      conectado = false;
-      estado = 'ERROR BT';
-    });
   }
-}
 
   Future<void> enviarTextoBt(String texto) async {
     if (conexionBT == null) return;
@@ -1109,7 +1106,8 @@ class _PantallaMonitoreoState extends State<PantallaMonitoreo> {
       ),
     );
   }
-    void abrirHistoriales() {
+
+  void abrirHistoriales() {
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -1166,12 +1164,12 @@ class _PantallaMonitoreoState extends State<PantallaMonitoreo> {
       width: double.infinity,
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.55),
+        color: Colors.black.withValues(alpha: 0.55),
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: Colors.white12),
         boxShadow: [
           BoxShadow(
-            color: color.withOpacity(0.12),
+            color: color.withValues(alpha: 0.12),
             blurRadius: 16,
             spreadRadius: 2,
           ),
@@ -1339,11 +1337,8 @@ class _PantallaMonitoreoState extends State<PantallaMonitoreo> {
       ),
     );
   }
-
-  @override
+    @override
   Widget build(BuildContext context) {
-    final tiempoFormateado = formatearTiempo(segundosOperacion);
-
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
       appBar: AppBar(
@@ -1363,14 +1358,6 @@ class _PantallaMonitoreoState extends State<PantallaMonitoreo> {
                 child: Text('Pendientes de envío'),
               ),
               PopupMenuItem(
-                value: 'Descarga de reporte',
-                child: Text('Descarga de reporte'),
-              ),
-              PopupMenuItem(
-                value: 'Solicita ayuda o reporta errores',
-                child: Text('Solicita ayuda o reporta errores'),
-              ),
-              PopupMenuItem(
                 value: 'Cerrar sesión',
                 child: Text('Cerrar sesión'),
               ),
@@ -1381,165 +1368,94 @@ class _PantallaMonitoreoState extends State<PantallaMonitoreo> {
       body: Padding(
         padding: const EdgeInsets.all(18),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: const Color(0xFF2A2A2A),
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: Colors.white12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+            Expanded(
+              child: Row(
                 children: [
-                  Text(
-                    'Usuario: ${widget.usuario.nombre} | Rol: ${widget.usuario.rol}',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      color: Colors.white70,
-                    ),
+                  Expanded(
+                    flex: 2,
+                    child: panelVisual(),
                   ),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Container(
-                        width: 14,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          color: colorEstado(),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          estado,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: colorEstado(),
-                            fontWeight: FontWeight.bold,
+                  const SizedBox(width: 18),
+                  Expanded(
+                    flex: 3,
+                    child: Column(
+                      children: [
+                        Expanded(
+                          child: tarjetaDisplay(
+                            titulo: 'RPM',
+                            valor: rpm.toStringAsFixed(0),
+                            unidad: 'revoluciones/min',
+                            color: Colors.greenAccent,
                           ),
                         ),
-                      ),
-                      Text(
-                        'TIEMPO: $tiempoFormateado',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
+                        const SizedBox(height: 14),
+                        Expanded(
+                          child: tarjetaDisplay(
+                            titulo: 'CAUDAL',
+                            valor: caudal.toStringAsFixed(2),
+                            unidad: 'barriles/min',
+                            color: Colors.lightBlueAccent,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Lugar de trabajo de bombeo móvil: ${widget.lugar} - ID: ${widget.idTrabajo}',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      color: Colors.white70,
+                        const SizedBox(height: 14),
+                        Expanded(
+                          child: tarjetaDisplay(
+                            titulo: 'TOTAL',
+                            valor: totalBombeado.toStringAsFixed(2),
+                            unidad: 'barriles',
+                            color: Colors.orangeAccent,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 18),
-            Expanded(
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  final esAncho = constraints.maxWidth > 900;
-
-                  if (esAncho) {
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(flex: 6, child: panelVisual()),
-                        const SizedBox(width: 18),
-                        Expanded(
-                          flex: 5,
-                          child: SingleChildScrollView(
-                            child: Column(
-                              children: [
-                                tarjetaDisplay(
-                                  titulo: 'CAUDAL ACTUAL',
-                                  valor: caudal.toStringAsFixed(4),
-                                  unidad: 'BARRILES / MIN',
-                                ),
-                                const SizedBox(height: 16),
-                                tarjetaDisplay(
-                                  titulo: 'CAUDAL POR HORA',
-                                  valor: caudalHora.toStringAsFixed(2),
-                                  unidad: 'BARRILES / HORA',
-                                  color: Colors.cyanAccent,
-                                ),
-                                const SizedBox(height: 16),
-                                tarjetaDisplay(
-                                  titulo: 'VOLUMEN TOTAL BOMB.',
-                                  valor: totalBombeado.toStringAsFixed(4),
-                                  unidad: 'BARRILES',
-                                  color: Colors.orangeAccent,
-                                ),
-                                const SizedBox(height: 16),
-                                tarjetaDisplay(
-                                  titulo: 'REVOLUCIONES DEL MOTOR',
-                                  valor: rpm.toStringAsFixed(2),
-                                  unidad: 'RPM',
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    );
-                  }
-
-                  return SingleChildScrollView(
-                    child: Column(
-                      children: [
-                        panelVisual(),
-                        const SizedBox(height: 18),
-                        tarjetaDisplay(
-                          titulo: 'CAUDAL ACTUAL',
-                          valor: caudal.toStringAsFixed(4),
-                          unidad: 'BARRILES / MIN',
-                        ),
-                        const SizedBox(height: 16),
-                        tarjetaDisplay(
-                          titulo: 'CAUDAL POR HORA',
-                          valor: caudalHora.toStringAsFixed(2),
-                          unidad: 'BARRILES / HORA',
-                          color: Colors.cyanAccent,
-                        ),
-                        const SizedBox(height: 16),
-                        tarjetaDisplay(
-                          titulo: 'VOLUMEN TOTAL BOMB.',
-                          valor: totalBombeado.toStringAsFixed(4),
-                          unidad: 'BARRILES',
-                          color: Colors.orangeAccent,
-                        ),
-                        const SizedBox(height: 16),
-                        tarjetaDisplay(
-                          titulo: 'REVOLUCIONES DEL MOTOR',
-                          valor: rpm.toStringAsFixed(2),
-                          unidad: 'RPM',
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
             const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(
+                  child: tarjetaDisplay(
+                    titulo: 'CAUDAL / HORA',
+                    valor: caudalHora.toStringAsFixed(2),
+                    unidad: 'barriles/hora',
+                    color: Colors.cyanAccent,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: tarjetaDisplay(
+                    titulo: 'TIEMPO',
+                    valor: formatearTiempo(segundosOperacion),
+                    unidad: 'hh:mm:ss',
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: tarjetaDisplay(
+                    titulo: 'ESTADO',
+                    valor: estado,
+                    unidad: '',
+                    color: colorEstado(),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
             SizedBox(
-              height: 56,
+              width: double.infinity,
+              height: 60,
               child: ElevatedButton(
                 onPressed: finalizando ? null : finalizarOperacion,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
+                  backgroundColor: Colors.redAccent,
                 ),
-                child: Text(
-                  finalizando ? 'FINALIZANDO...' : 'FINALIZAR DESCARGA',
-                  style: const TextStyle(fontSize: 17),
+                child: const Text(
+                  'FINALIZAR OPERACIÓN',
+                  style: TextStyle(fontSize: 18),
                 ),
               ),
             ),
@@ -1549,7 +1465,6 @@ class _PantallaMonitoreoState extends State<PantallaMonitoreo> {
     );
   }
 }
-
 class PantallaResumen extends StatelessWidget {
   final Usuario usuario;
   final String lugar;
@@ -1662,7 +1577,8 @@ class PantallaResumen extends StatelessWidget {
       ),
     );
   }
-    @override
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF1A1A1A),
@@ -1778,6 +1694,8 @@ class PantallaHistoriales extends StatefulWidget {
 class _PantallaHistorialesState extends State<PantallaHistoriales> {
   List<RegistroOperacion> registros = [];
   bool cargando = true;
+  bool usandoVps = false;
+  String? mensajeEstado;
 
   @override
   void initState() {
@@ -1786,13 +1704,52 @@ class _PantallaHistorialesState extends State<PantallaHistoriales> {
   }
 
   Future<void> cargarHistorial() async {
-    final lista = await ReporteService.cargarHistorial();
-    lista.sort((a, b) => b.fechaFin.compareTo(a.fechaFin));
-
     setState(() {
-      registros = lista;
-      cargando = false;
+      cargando = true;
+      mensajeEstado = null;
     });
+
+    try {
+      final lista = await ReporteService.cargarHistorialDesdeVps();
+
+      for (var i = 0; i < lista.length; i++) {
+        final r = lista[i];
+        if (r.grupoHistorial.trim().isEmpty) {
+          final grupo = '${r.lugar} - ${formatoSoloFecha(r.fechaFin)}';
+          lista[i] = r.copyWith(grupoHistorial: grupo);
+        }
+      }
+
+      lista.sort((a, b) => b.fechaFin.compareTo(a.fechaFin));
+
+      if (!mounted) return;
+      setState(() {
+        registros = lista;
+        cargando = false;
+        usandoVps = true;
+        mensajeEstado = 'Historial cargado desde servidor';
+      });
+    } catch (e) {
+      final listaLocal = await ReporteService.cargarHistorial();
+
+      for (var i = 0; i < listaLocal.length; i++) {
+        final r = listaLocal[i];
+        if (r.grupoHistorial.trim().isEmpty) {
+          final grupo = '${r.lugar} - ${formatoSoloFecha(r.fechaFin)}';
+          listaLocal[i] = r.copyWith(grupoHistorial: grupo);
+        }
+      }
+
+      listaLocal.sort((a, b) => b.fechaFin.compareTo(a.fechaFin));
+
+      if (!mounted) return;
+      setState(() {
+        registros = listaLocal;
+        cargando = false;
+        usandoVps = false;
+        mensajeEstado = 'Sin conexión al servidor. Mostrando historial local';
+      });
+    }
   }
 
   void cerrarSesion() {
@@ -1809,6 +1766,11 @@ class _PantallaHistorialesState extends State<PantallaHistoriales> {
       return;
     }
 
+    if (value == 'Recargar historial') {
+      cargarHistorial();
+      return;
+    }
+
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('Opción seleccionada: $value')),
     );
@@ -1821,6 +1783,13 @@ class _PantallaHistorialesState extends State<PantallaHistoriales> {
     final hora = fecha.hour.toString().padLeft(2, '0');
     final minuto = fecha.minute.toString().padLeft(2, '0');
     return '$dia/$mes/$anio  $hora:$minuto';
+  }
+
+  String formatoSoloFecha(DateTime fecha) {
+    final dia = fecha.day.toString().padLeft(2, '0');
+    final mes = fecha.month.toString().padLeft(2, '0');
+    final anio = fecha.year.toString();
+    return '$dia/$mes/$anio';
   }
 
   Widget tarjetaRegistro(RegistroOperacion r) {
@@ -1855,14 +1824,17 @@ class _PantallaHistorialesState extends State<PantallaHistoriales> {
       ),
     );
   }
-
-  @override
+    @override
   Widget build(BuildContext context) {
     final Map<String, List<RegistroOperacion>> grupos = {};
 
     for (final registro in registros) {
-      grupos.putIfAbsent(registro.grupoHistorial, () => []);
-      grupos[registro.grupoHistorial]!.add(registro);
+      final claveGrupo = registro.grupoHistorial.trim().isEmpty
+          ? '${registro.lugar} - ${formatoSoloFecha(registro.fechaFin)}'
+          : registro.grupoHistorial;
+
+      grupos.putIfAbsent(claveGrupo, () => []);
+      grupos[claveGrupo]!.add(registro);
     }
 
     final claves = grupos.keys.toList();
@@ -1878,6 +1850,10 @@ class _PantallaHistorialesState extends State<PantallaHistoriales> {
             onSelected: manejarMenu,
             itemBuilder: (context) => const [
               PopupMenuItem(
+                value: 'Recargar historial',
+                child: Text('Recargar historial'),
+              ),
+              PopupMenuItem(
                 value: 'Cerrar sesión',
                 child: Text('Cerrar sesión'),
               ),
@@ -1887,46 +1863,81 @@ class _PantallaHistorialesState extends State<PantallaHistoriales> {
       ),
       body: cargando
           ? const Center(child: CircularProgressIndicator())
-          : registros.isEmpty
-              ? const Center(
-                  child: Text(
-                    'No hay registros guardados todavía',
-                    style: TextStyle(fontSize: 16, color: Colors.white70),
-                  ),
-                )
-              : ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: claves.length,
-                  itemBuilder: (context, index) {
-                    final grupo = claves[index];
-                    final lista = grupos[grupo]!;
-
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 16),
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A2A),
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.white12),
+          : Column(
+              children: [
+                if (mensajeEstado != null)
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: usandoVps
+                          ? Colors.green.withValues(alpha: 0.15)
+                          : Colors.orange.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: usandoVps
+                            ? Colors.greenAccent
+                            : Colors.orangeAccent,
                       ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            grupo,
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.lightBlueAccent,
+                    ),
+                    child: Text(
+                      mensajeEstado!,
+                      style: TextStyle(
+                        color: usandoVps
+                            ? Colors.greenAccent
+                            : Colors.orangeAccent,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                Expanded(
+                  child: registros.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'No hay registros guardados todavía',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: Colors.white70,
                             ),
                           ),
-                          const SizedBox(height: 12),
-                          ...lista.map(tarjetaRegistro),
-                        ],
-                      ),
-                    );
-                  },
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: claves.length,
+                          itemBuilder: (context, index) {
+                            final grupo = claves[index];
+                            final lista = grupos[grupo]!;
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF2A2A2A),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: Colors.white12),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    grupo,
+                                    style: const TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.lightBlueAccent,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  ...lista.map(tarjetaRegistro),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                 ),
+              ],
+            ),
     );
   }
 }
