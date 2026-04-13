@@ -29,19 +29,51 @@ class ReporteService {
 
       if (response.statusCode == 200) {
         final historial = await cargarHistorial();
-        historial.add(op.copyWith(pendienteEnvio: false));
-        await guardarHistorial(historial);
+
+        final existe = historial.any(
+          (r) => r.operationKey == op.operationKey,
+        );
+
+        if (!existe) {
+          historial.add(op.copyWith(pendienteEnvio: false));
+          await guardarHistorial(historial);
+        } else {
+          final index = historial.indexWhere(
+            (r) => r.operationKey == op.operationKey,
+          );
+
+          if (index != -1) {
+            historial[index] = historial[index].copyWith(
+              pendienteEnvio: false,
+            );
+            await guardarHistorial(historial);
+          }
+        }
       } else {
         throw Exception('Error servidor');
       }
     } catch (e) {
       final historial = await cargarHistorial();
-      historial.add(op);
-      await guardarHistorial(historial);
+
+      final existeHistorial = historial.any(
+        (r) => r.operationKey == op.operationKey,
+      );
+
+      if (!existeHistorial) {
+        historial.add(op);
+        await guardarHistorial(historial);
+      }
 
       final pendientes = await cargarPendientes();
-      pendientes.add(op);
-      await guardarPendientes(pendientes);
+
+      final existePendiente = pendientes.any(
+        (r) => r.operationKey == op.operationKey,
+      );
+
+      if (!existePendiente) {
+        pendientes.add(op);
+        await guardarPendientes(pendientes);
+      }
     }
   }
 
@@ -108,6 +140,9 @@ class ReporteService {
             historial[index] = historial[index].copyWith(
               pendienteEnvio: false,
             );
+            await guardarHistorial(historial);
+          } else {
+            historial.add(op.copyWith(pendienteEnvio: false));
             await guardarHistorial(historial);
           }
         } else {
